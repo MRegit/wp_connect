@@ -3,6 +3,7 @@
 /node_modules
 /swagger-docs
 /.vs
+/.vscode
 /bin
 /log
 /obj/Debug

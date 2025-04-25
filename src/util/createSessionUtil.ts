@@ -44,13 +44,22 @@ export default class CreateSessionUtil {
       if (client.status != null && client.status !== 'CLOSED') return;
       client.status = 'INITIALIZING';
       client.config = req.body;
-
+      client.qrcode = null;
+      client.urlcode = null;
       const tokenStore = new Factory();
       const myTokenStore = tokenStore.createTokenStory(client);
       const tokenData = await myTokenStore.getToken(session);
 
-      // we need this to update phone in config every time session starts, so we can ask for code for it again.
-      myTokenStore.setToken(session, tokenData ?? {});
+      // Modificamos el comportamiento del token para forzar la generación de un nuevo QR
+      // si el cliente estaba en estado QRCODE
+      if (tokenData && !client.forceNewQR) {
+        myTokenStore.setToken(session, tokenData);
+      } else {
+        // Si queremos forzar un nuevo QR, podemos vaciar el token almacenado
+        myTokenStore.setToken(session, {});
+        // Eliminamos la bandera después de usarla
+        delete client.forceNewQR;
+      }
 
       this.startChatWootClient(client);
 
@@ -151,7 +160,17 @@ export default class CreateSessionUtil {
     }
   }
 
-  async opendata(req: Request, session: string, res?: any) {
+  async opendata(
+    req: Request,
+    session: string,
+    res?: any,
+    forceNewQR: boolean = false
+  ) {
+    // Si forzamos nuevo QR, marcamos el cliente
+    if (forceNewQR) {
+      let client = this.getClient(session) as any;
+      client.forceNewQR = true;
+    }
     await this.createSessionUtil(req, clientsArray, session, res);
   }
 
@@ -361,7 +380,14 @@ export default class CreateSessionUtil {
     delete object.webhook;
     return object;
   }
+  isQRCodeExpired(client: any) {
+    // QR codes duran aproximadamente 60 segundos
+    const QR_EXPIRATION_TIME = 60 * 1000; // 60 segundos en milisegundos
 
+    return (
+      client.qrTimestamp && Date.now() - client.qrTimestamp > QR_EXPIRATION_TIME
+    );
+  }
   getClient(session: any) {
     let client = clientsArray[session];
 
